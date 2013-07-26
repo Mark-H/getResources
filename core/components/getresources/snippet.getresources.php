@@ -5,7 +5,7 @@
  * A general purpose Resource listing and summarization snippet for MODX 2.x.
  *
  * @author Jason Coward
- * @copyright Copyright 2010-2013, Jason Coward
+ * @copyright Copyright 2010-2012, Jason Coward
  *
  * TEMPLATES
  *
@@ -96,6 +96,7 @@ $outputSeparator = isset($outputSeparator) ? $outputSeparator : "\n";
 /* set default properties */
 $tpl = !empty($tpl) ? $tpl : '';
 $includeContent = !empty($includeContent) ? true : false;
+$processContent = !empty($processContent) ? true : false;
 $includeTVs = !empty($includeTVs) ? true : false;
 $includeTVList = !empty($includeTVList) ? explode(',', $includeTVList) : array();
 $processTVs = !empty($processTVs) ? true : false;
@@ -428,6 +429,13 @@ $templateVars = array();
 if (!empty($includeTVs) && !empty($includeTVList)) {
     $templateVars = $modx->getCollection('modTemplateVar', array('name:IN' => $includeTVList));
 }
+
+if ($processContent) {
+    $currentResource = $modx->resource;
+    $currentResourceIdentifier = $modx->resourceIdentifier;
+    $currentElementCache = $modx->elementCache;
+}
+
 /** @var modResource $resource */
 foreach ($collection as $resourceId => $resource) {
     $tvs = array();
@@ -461,7 +469,18 @@ foreach ($collection as $resourceId => $resource) {
         ,$includeContent ? $resource->toArray() : $resource->get($fields)
         ,$tvs
     );
-    $resourceTpl = false;
+    if ($includeContent) {
+        $properties['content'] = $resource->getContent();
+        
+        if ($processContent) {
+            $modx->resource = $resource;
+            $modx->resourceIdentifier = $resource->get('id');
+            $modx->elementCache = array();
+            
+            $modx->getParser()->processElementTags('[[*content]]', $properties['content'], false, false, '[[', ']]', array(), $maxIterations);
+        }
+    }
+    $resourceTpl = '';
     if ($idx == $first && !empty($tplFirst)) {
         $resourceTpl = parseTpl($tplFirst, $properties);
     }
@@ -575,7 +594,7 @@ foreach ($collection as $resourceId => $resource) {
     if (!empty($tpl) && empty($resourceTpl)) {
         $resourceTpl = parseTpl($tpl, $properties);
     }
-    if ($resourceTpl === false && !empty($debug)) {
+    if (empty($resourceTpl)) {
         $chunk = $modx->newObject('modChunk');
         $chunk->setCacheable(false);
         $output[]= $chunk->process(array(), '<pre>' . print_r($properties, true) .'</pre>');
@@ -583,6 +602,12 @@ foreach ($collection as $resourceId => $resource) {
         $output[]= $resourceTpl;
     }
     $idx++;
+}
+
+if ($processContent) {
+    $modx->elementCache = $currentElementCache;
+    $modx->resourceIdentifier = $currentResourceIdentifier;
+    $modx->resource = $currentResource;
 }
 
 /* output */
